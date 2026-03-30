@@ -3,7 +3,7 @@ import type { PlaceCategory } from '$lib/types';
 class MapState {
 	lat = $state<number | null>(null);
 	lng = $state<number | null>(null);
-	radius_m = $state(2000);
+	radius_m = $state(1000);
 	business_description = $state('');
 	report = $state<string | null>(null);
 	address = $state<string | null>(null);

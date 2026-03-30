@@ -9,11 +9,8 @@
 	}
 </script>
 
-<div class="space-y-1">
-	<div class="flex items-center justify-between">
-		<label for="radius" class="text-sm font-medium text-gray-700">Radius</label>
-		<span class="text-sm font-semibold text-blue-600">{formatRadius(mapState.radius_m)}</span>
-	</div>
+<div class="flex items-center gap-3">
+	<span class="text-xs font-medium whitespace-nowrap text-slate-500">Radius</span>
 	<input
 		id="radius"
 		type="range"
@@ -21,10 +18,7 @@
 		max="10000"
 		step="100"
 		bind:value={mapState.radius_m}
-		class="w-full accent-blue-600"
+		class="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-emerald-600"
 	/>
-	<div class="flex justify-between text-xs text-gray-400">
-		<span>500m</span>
-		<span>10km</span>
-	</div>
+	<span class="w-14 text-right text-xs font-semibold text-emerald-700">{formatRadius(mapState.radius_m)}</span>
 </div>

@@ -46,6 +46,8 @@ export async function searchNearby(
 	});
 
 	if (!res.ok) {
+		const errText = await res.text().catch(() => '');
+		console.error(`[places] searchNearby failed for "${query}" (${res.status}): ${errText}`);
 		// If the type isn't recognized, try a text search instead
 		return searchNearbyText(lat, lng, radius_m, query);
 	}
@@ -94,7 +96,11 @@ async function searchNearbyText(
 		body: JSON.stringify(body)
 	});
 
-	if (!res.ok) return [];
+	if (!res.ok) {
+		const errText = await res.text().catch(() => '');
+		console.error(`[places] searchNearbyText failed for "${query}" (${res.status}): ${errText}`);
+		return [];
+	}
 
 	const data: NearbySearchResult = await res.json();
 	if (!data.places) return [];

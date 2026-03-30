@@ -18,7 +18,7 @@ const SYSTEM_PROMPT = `You are a senior business location analyst. Given a busin
 A 2-3 sentence overview of the location's viability for this business.
 
 ## Customer Segments
-Identify 3-5 customer segments based on nearby places. For each: estimated volume, spending habits, peak hours.
+Identify 3-5 customer segments based on nearby places. For each: product expectation, estimated volume, spending habits, peak hours.
 
 ## Market Saturation
 Analyze existing competitors and similar businesses found nearby. Rate saturation as Low/Medium/High. Identify gaps and opportunities.
@@ -32,7 +32,10 @@ For each failure mode above, provide a concrete, actionable strategy.
 ## Location Score
 Rate 1-10 with a one-sentence justification.
 
-Be specific, data-driven (reference actual places found), and actionable.`;
+Be specific, data-driven (reference actual places found), and actionable.
+
+3. Format the output professionally with markdown
+4. Answer in the same language as the user prompt`;
 
 const searchToolDeclaration = {
 	name: 'search_nearby_places',
@@ -69,16 +72,20 @@ export async function generateReport(
 	if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 	const ai = new GoogleGenAI({ apiKey });
 
-	const userMessage = `Business Idea: ${business_description}
+	const userMessage = `Ide bisnis: ${business_description}
 
-Location: ${address} (${lat.toFixed(6)}, ${lng.toFixed(6)})
-Search Radius: ${radius_m}m
+Lokaso: ${address} (${lat.toFixed(6)}, ${lng.toFixed(6)})
+Radius Pencarian: ${radius_m}m
 
-Please search for relevant nearby places and then generate a business opportunity report.`;
+Cari relevant nearby places kemudian buatkan sebuah business opportunity report.
+Things to note:
+	- gunakan "menara" atau "tower" untuk pencarian gedung kantor
+	- gunakan "apartemen" atau "perumahan" untuk pencarian area residensial
+`;
 
 	// Step 1: Initial call with tool
 	const response = await ai.models.generateContent({
-		model: 'gemini-2.0-flash',
+		model: 'gemini-3.1-flash-lite-preview', // gemini 3.1 model should be used
 		contents: [{ role: 'user', parts: [{ text: userMessage }] }],
 		config: {
 			systemInstruction: SYSTEM_PROMPT,
@@ -127,20 +134,12 @@ Please search for relevant nearby places and then generate a business opportunit
 	}));
 
 	const finalResponse = await ai.models.generateContent({
-		model: 'gemini-2.0-flash',
+		model: 'gemini-3.1-flash-lite-preview', // gemini 3.1 model should be used
 		contents: [
 			{ role: 'user', parts: [{ text: userMessage }] },
-			{
-				role: 'model',
-				parts: [
-					{
-						functionCall: {
-							name: 'search_nearby_places',
-							args: { queries }
-						}
-					}
-				]
-			},
+			// Pass ALL parts from first response — gemini includes a thought_signature
+			// that must be echoed back or the API returns a 400 error
+			{ role: 'model', parts: candidate.content.parts },
 			{
 				role: 'user',
 				parts: [
@@ -161,6 +160,9 @@ Please search for relevant nearby places and then generate a business opportunit
 	});
 
 	const finalCandidate = finalResponse.candidates?.[0];
+	if (!finalCandidate?.content?.parts?.find((p) => p.text)) {
+		console.error('[ai-report] Final response has no text part. Parts:', JSON.stringify(finalCandidate?.content?.parts?.map(p => Object.keys(p))));
+	}
 	const reportText =
 		finalCandidate?.content?.parts?.find((p) => p.text)?.text ?? 'Failed to generate report.';
 

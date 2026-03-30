@@ -1,84 +1,99 @@
 <script lang="ts">
-	import { Loader } from '@googlemaps/js-api-loader';
 	import { onMount } from 'svelte';
 	import { mapState } from '$lib/stores/map-state.svelte';
 
 	let mapEl: HTMLDivElement;
 	let map: google.maps.Map;
-	let marker: google.maps.marker.AdvancedMarkerElement | null = null;
+	let marker: google.maps.Marker | null = null;
 	let circle: google.maps.Circle | null = null;
+	let placeMarkers: google.maps.Marker[] = [];
 
 	export function panTo(lat: number, lng: number) {
 		if (map) {
 			map.panTo({ lat, lng });
-			placeMarker(lat, lng);
+			placeMarkerAt(lat, lng);
 		}
 	}
 
-	export function getMap() {
-		return map;
-	}
-
-	function placeMarker(lat: number, lng: number) {
+	function placeMarkerAt(lat: number, lng: number) {
 		mapState.setLocation(lat, lng);
-
 		if (marker) {
-			marker.position = { lat, lng };
+			marker.setPosition({ lat, lng });
+		} else {
+			marker = new google.maps.Marker({ position: { lat, lng }, map, draggable: true });
+			marker.addListener('dragend', () => {
+				const pos = marker!.getPosition();
+				if (pos) {
+					mapState.setLocation(pos.lat(), pos.lng());
+					circle?.setCenter({ lat: pos.lat(), lng: pos.lng() });
+				}
+			});
 		}
-
 		if (circle) {
 			circle.setCenter({ lat, lng });
-		}
-	}
-
-	function updateCircle() {
-		if (circle && mapState.lat !== null && mapState.lng !== null) {
-			circle.setRadius(mapState.radius_m);
+		} else {
+			circle = new google.maps.Circle({
+				map,
+				center: { lat, lng },
+				radius: mapState.radius_m,
+				fillColor: '#059669',
+				fillOpacity: 0.12,
+				strokeColor: '#059669',
+				strokeOpacity: 0.5,
+				strokeWeight: 2
+			});
 		}
 	}
 
 	$effect(() => {
 		mapState.radius_m;
-		updateCircle();
+		if (circle && mapState.lat !== null && mapState.lng !== null) {
+			circle.setRadius(mapState.radius_m);
+		}
 	});
 
-	// Show nearby places as markers when report is generated
-	let placeMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
-
 	$effect(() => {
-		// Clear old place markers
-		for (const m of placeMarkers) {
-			m.map = null;
-		}
+		for (const m of placeMarkers) m.setMap(null);
 		placeMarkers = [];
 
 		if (mapState.places.length > 0 && map) {
-			const colors: Record<string, string> = {};
 			const palette = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'];
+			const colors: Record<string, string> = {};
 
 			for (const category of mapState.places) {
 				if (!colors[category.query]) {
 					colors[category.query] = palette[Object.keys(colors).length % palette.length];
 				}
-				const color = colors[category.query];
+				const m = new google.maps.Marker({
+					position: { lat: category.items[0]?.lat ?? 0, lng: category.items[0]?.lng ?? 0 },
+					map,
+					title: category.query,
+					icon: {
+						path: google.maps.SymbolPath.CIRCLE,
+						scale: 7,
+						fillColor: colors[category.query],
+						fillOpacity: 1,
+						strokeColor: '#fff',
+						strokeWeight: 2
+					}
+				});
+				placeMarkers.push(m);
 
-				for (const place of category.items) {
-					const pin = document.createElement('div');
-					pin.style.width = '12px';
-					pin.style.height = '12px';
-					pin.style.borderRadius = '50%';
-					pin.style.backgroundColor = color;
-					pin.style.border = '2px solid white';
-					pin.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)';
-					pin.title = `${place.name} (${category.query})`;
-
-					const m = new google.maps.marker.AdvancedMarkerElement({
+				for (const place of category.items.slice(1)) {
+					const pm = new google.maps.Marker({
 						position: { lat: place.lat, lng: place.lng },
 						map,
-						content: pin,
-						title: place.name
+						title: place.name,
+						icon: {
+							path: google.maps.SymbolPath.CIRCLE,
+							scale: 7,
+							fillColor: colors[category.query],
+							fillOpacity: 1,
+							strokeColor: '#fff',
+							strokeWeight: 2
+						}
 					});
-					placeMarkers.push(m);
+					placeMarkers.push(pm);
 				}
 			}
 		}
@@ -87,75 +102,29 @@
 	onMount(async () => {
 		const apiKey = import.meta.env.VITE_GOOGLE_MAPS_CLIENT_KEY;
 		if (!apiKey) {
-			console.error('VITE_GOOGLE_MAPS_CLIENT_KEY not set');
+			console.error('VITE_GOOGLE_MAPS_CLIENT_KEY is not set');
 			return;
 		}
 
-		const loader = new Loader({
-			apiKey,
-			libraries: ['places', 'marker']
-		});
+		// Dynamic import keeps this package out of SSR entirely
+		const { Loader } = await import('@googlemaps/js-api-loader');
+		const loader = new Loader({ apiKey, version: 'weekly', libraries: ['places'] });
+		await loader.load();
 
-		const [mapsLib] = await Promise.all([
-			loader.importLibrary('maps'),
-			loader.importLibrary('marker')
-		]);
-
-		map = new mapsLib.Map(mapEl, {
-			center: { lat: -6.2, lng: 106.8 },
+		map = new google.maps.Map(mapEl, {
+			center: { lat: 3.139, lng: 101.6869 }, // Kuala Lumpur default
 			zoom: 14,
-			mapId: 'bizmapanalyst',
-			disableDefaultUI: false,
 			zoomControl: true,
 			mapTypeControl: false,
 			streetViewControl: false,
 			fullscreenControl: false
 		});
 
-		// Click to place marker
 		map.addListener('click', (e: google.maps.MapMouseEvent) => {
-			if (e.latLng) {
-				const lat = e.latLng.lat();
-				const lng = e.latLng.lng();
-
-				if (!marker) {
-					marker = new google.maps.marker.AdvancedMarkerElement({
-						position: { lat, lng },
-						map,
-						gmpDraggable: true,
-						title: 'Selected Location'
-					});
-
-					marker.addListener('dragend', () => {
-						if (marker?.position) {
-							const pos = marker.position as google.maps.LatLngLiteral;
-							mapState.setLocation(pos.lat, pos.lng);
-							if (circle) circle.setCenter(pos);
-						}
-					});
-				} else {
-					marker.position = { lat, lng };
-				}
-
-				if (!circle) {
-					circle = new google.maps.Circle({
-						map,
-						center: { lat, lng },
-						radius: mapState.radius_m,
-						fillColor: '#2563eb',
-						fillOpacity: 0.1,
-						strokeColor: '#2563eb',
-						strokeOpacity: 0.4,
-						strokeWeight: 2
-					});
-				} else {
-					circle.setCenter({ lat, lng });
-				}
-
-				mapState.setLocation(lat, lng);
-			}
+			if (!e.latLng) return;
+			placeMarkerAt(e.latLng.lat(), e.latLng.lng());
 		});
 	});
 </script>
 
-<div bind:this={mapEl} class="h-full w-full"></div>
+<div bind:this={mapEl} style="width:100%;height:100%;"></div>
