@@ -74,7 +74,7 @@ export async function generateReport(
 
 	const userMessage = `Ide bisnis: ${business_description}
 
-Lokaso: ${address} (${lat.toFixed(6)}, ${lng.toFixed(6)})
+Lokasi: ${address} (${lat.toFixed(6)}, ${lng.toFixed(6)})
 Radius Pencarian: ${radius_m}m
 
 Cari relevant nearby places kemudian buatkan sebuah business opportunity report.
