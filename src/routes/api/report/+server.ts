@@ -1,9 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+
+export const config = { maxDuration: 60 };
 import { reverseGeocode } from '$lib/server/geocoding';
 import { generateReport } from '$lib/server/ai-report';
+import { checkRateLimit } from '$lib/server/rate-limit';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+	const ip = getClientAddress();
+	const { allowed, retryAfter } = checkRateLimit(ip);
+	if (!allowed) {
+		return json(
+			{ error: 'Too many requests. Please wait before generating another report.' },
+			{ status: 429, headers: { 'Retry-After': String(retryAfter) } }
+		);
+	}
+
 	try {
 		const body = await request.json();
 
