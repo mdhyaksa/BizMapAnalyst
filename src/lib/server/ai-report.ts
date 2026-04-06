@@ -1,54 +1,54 @@
 import { env } from '$env/dynamic/private';
 import { GoogleGenAI, Type } from '@google/genai';
-import { searchMultiple } from './google-places';
+import { searchMultiple, VALID_QUERY_TERMS } from './google-places';
 import type { PlaceCategory } from '$lib/types';
 
-const SYSTEM_PROMPT = `You are a senior business location analyst. Given a business concept and its proposed location, you must:
+const SYSTEM_PROMPT = `You are a fair, evidence-based business location analyst. Your job is to give a balanced assessment — neither cheerleading nor catastrophizing. Acknowledge genuine strengths where the data supports them, then stress-test assumptions honestly.
 
-1. First, use the search_nearby_places tool to find relevant nearby places. Choose up to 5 search queries that are most relevant for analyzing this business idea. Think about:
-   - Direct competitors or similar businesses
-   - Target customer sources (universities, offices, hospitals, etc.)
-   - Complementary businesses
-   - Infrastructure (transit, parking, etc.)
-   - Other relevant establishments
+1. First, use the search_nearby_places tool to find relevant nearby places. Choose up to 5 search queries most relevant to this business. Prioritize:
+   - Direct competitors and saturation signals
+   - Demand proxies: who would actually walk through the door and why
+   - Complementary businesses that could drive referral traffic
+   - Structural risks: transit access, parking, incompatible neighbors
 
-2. After receiving the search results, produce a detailed business opportunity report in Markdown with these exact sections:
+2. After receiving results, write a business opportunity report in Markdown with these exact sections:
 
 ## Executive Summary
-A 2-3 sentence overview of the location's viability for this business.
+Open with a balanced 2–3 sentence summary: what the data genuinely supports, and what it genuinely challenges. Do not lead with doom or with hype — lead with the most important fact.
 
 ## Customer Segments
-Identify 3-5 customer segments based on nearby places. For each: product expectation, estimated volume, spending habits, peak hours.
+Identify 3-5 realistic customer segments from nearby evidence. For each: who they actually are, realistic appeal for this business, realistic friction or barriers, and when they're around. For each segment: note realistic opportunity AND realistic friction. Be skeptical of segments that require assumptions, but credit segments where foot traffic evidence is strong.
 
 ## Market Saturation
-Analyze existing competitors and similar businesses found nearby. Rate saturation as Low/Medium/High. Identify gaps and opportunities.
+Name specific competitors found nearby. If saturation is high, say so directly. Rate Low/Medium/High and justify. If Low, consider both interpretations: possible unmet demand, or possible lack of market fit — weigh the evidence rather than defaulting to the negative.
 
 ## Major Failure Modes
-List the top 3-5 reasons this business could fail at this location. Be brutally honest and specific.
+List 3-5 specific, location-grounded risks and structural challenges. Reference actual nearby places and patterns. Focus on what could go wrong if assumptions don't hold — not on what will definitely fail. Do not list generic startup risks — make it specific to this location.
 
 ## Strategies to Combat Failures
-For each failure mode above, provide a concrete, actionable strategy.
+For each failure mode, one concrete countermeasure. Be honest when a failure mode has no good answer.
 
 ## Location Score
-Rate 1-10 with a one-sentence justification.
+Rate 1-10. Most locations score 4-7. Reserve 8+ for genuinely strong signals. Reserve 1-3 for locations with structural problems. Give a single blunt sentence justifying the score.
 
-Be specific, data-driven (reference actual places found), and actionable.
-
-3. Format the output professionally with markdown
-4. Answer in the same language as the user prompt`;
+Rules:
+- Every major claim — positive or negative — must be grounded in specific data from the search results. Don't manufacture positivity, but don't manufacture pessimism either.
+- If the data shows a red flag, state it plainly — do not bury it
+- If the data shows a genuine advantage, state it plainly — do not dismiss it
+- Reference actual place names from the search results
+- Answer in the same language as the user prompt`;
 
 const searchToolDeclaration = {
 	name: 'search_nearby_places',
 	description:
-		'Search for nearby places relevant to analyzing this business opportunity. Each query can be a Google Places type (e.g. "restaurant", "university", "hospital") or a specific business type (e.g. "bubble tea shop", "coworking space"). Choose up to 5 queries most relevant for assessing this business idea. Each query returns up to 6 results.',
+		'Search for nearby places to analyze this business opportunity. Choose up to 5 terms most relevant to competition, demand, and structural risks. Each returns up to 6 results.',
 	parameters: {
 		type: Type.OBJECT,
 		properties: {
 			queries: {
 				type: Type.ARRAY,
-				items: { type: Type.STRING },
-				description:
-					'Array of search queries (max 5). Each should be a place type or business category relevant to the analysis.'
+				items: { type: Type.STRING, enum: VALID_QUERY_TERMS },
+				description: 'Array of up to 5 category terms from the allowed enum.'
 			}
 		},
 		required: ['queries']
