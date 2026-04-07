@@ -3,7 +3,7 @@ import type { PlaceItem } from '$lib/types';
 
 const AWS_REGION = 'ap-southeast-1';
 const BASE_URL = `https://places.geo.${AWS_REGION}.amazonaws.com`;
-const MAX_RESULTS_PER_QUERY = 6;
+const MAX_RESULTS_PER_QUERY = 8;
 
 // Maps query terms (English + Indonesian) to valid AWS place category IDs.
 // Full list: https://docs.aws.amazon.com/location/latest/developerguide/places-filtering.html#place-categories
@@ -267,11 +267,66 @@ async function searchByText(
 	if (!res.ok) {
 		const errText = await res.text().catch(() => '');
 		console.error(`[places] SearchText failed for "${query}" (${res.status}): ${errText}`);
-		return [];
+		return searchGooglePlaces(lat, lng, radius_m, query);
 	}
 
 	const data: AwsSearchResponse = await res.json();
 	return mapItems(data.ResultItems ?? [], lat, lng);
+}
+
+// Google Places Nearby Search — final fallback when AWS is unavailable
+async function searchGooglePlaces(
+	lat: number,
+	lng: number,
+	radius_m: number,
+	query: string
+): Promise<PlaceItem[]> {
+	const key = env.GOOGLE_API_KEY ?? '';
+	if (!key) {
+		console.error('[places] GOOGLE_API_KEY is not set — no fallback available');
+		return [];
+	}
+
+	console.log(`[places] Google Places fallback for "${query}"`);
+
+	const params = new URLSearchParams({
+		location: `${lat},${lng}`,
+		radius: String(Math.min(radius_m, 50000)), // Google max is 50000m
+		keyword: query,
+		key
+	});
+
+	const res = await fetch(
+		`https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params}`
+	);
+
+	if (!res.ok) {
+		console.error(`[places] Google Places failed for "${query}" (${res.status})`);
+		return [];
+	}
+
+	interface GooglePlaceResult {
+		name?: string;
+		types?: string[];
+		geometry?: { location?: { lat?: number; lng?: number } };
+	}
+	interface GooglePlacesResponse {
+		status?: string;
+		results?: GooglePlaceResult[];
+	}
+
+	const data: GooglePlacesResponse = await res.json();
+	if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+		console.error(`[places] Google Places API status: ${data.status}`);
+		return [];
+	}
+
+	return (data.results ?? []).slice(0, MAX_RESULTS_PER_QUERY).map((r) => ({
+		name: r.name ?? 'Unknown',
+		types: r.types ?? [],
+		lat: r.geometry?.location?.lat ?? lat,
+		lng: r.geometry?.location?.lng ?? lng
+	}));
 }
 
 export async function searchMultiple(
@@ -283,7 +338,7 @@ export async function searchMultiple(
 	// Deduplicate: if two queries resolve to the same primary category, skip the second
 	const seenCategories = new Set<string>();
 	const deduped: string[] = [];
-	for (const query of queries.slice(0, 5)) {
+	for (const query of queries.slice(0, 6)) {
 		const cats = CATEGORY_MAP[query.toLowerCase().trim()];
 		const dedupeKey = cats ? cats[0] : query.toLowerCase().trim();
 		if (!seenCategories.has(dedupeKey)) {

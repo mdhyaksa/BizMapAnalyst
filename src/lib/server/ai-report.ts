@@ -5,8 +5,8 @@ import type { PlaceCategory } from '$lib/types';
 
 const SYSTEM_PROMPT = `You are a fair, evidence-based business location analyst. Your job is to give a balanced assessment — neither cheerleading nor catastrophizing. Acknowledge genuine strengths where the data supports them, then stress-test assumptions honestly.
 
-1. First, use the search_nearby_places tool to find relevant nearby places. Choose up to 5 search queries most relevant to this business. Prioritize:
-   - Direct competitors and saturation signals
+1. First, use the search_nearby_places tool to find relevant nearby places. Choose up to 6 search queries most relevant to this business. You MUST include:
+   - At least 1 query that directly targets the most likely competitors (same business type)
    - Demand proxies: who would actually walk through the door and why
    - Complementary businesses that could drive referral traffic
    - Structural risks: transit access, parking, incompatible neighbors
@@ -41,14 +41,14 @@ Rules:
 const searchToolDeclaration = {
 	name: 'search_nearby_places',
 	description:
-		'Search for nearby places to analyze this business opportunity. Choose up to 5 terms most relevant to competition, demand, and structural risks. Each returns up to 6 results.',
+		'Search for nearby places to analyze this business opportunity. Choose up to 6 terms most relevant to competition, demand, and structural risks. Always include at least one query targeting direct competitors. Each returns up to 8 results.',
 	parameters: {
 		type: Type.OBJECT,
 		properties: {
 			queries: {
 				type: Type.ARRAY,
 				items: { type: Type.STRING, enum: VALID_QUERY_TERMS },
-				description: 'Array of up to 5 category terms from the allowed enum.'
+				description: 'Array of up to 6 category terms from the allowed enum. Must include at least one term matching the business type for competitor detection.'
 			}
 		},
 		required: ['queries']
@@ -111,7 +111,7 @@ Things to note:
 
 	// Step 2: Execute the tool call
 	const args = functionCall.functionCall.args as { queries: string[] };
-	const queries = (args.queries || []).slice(0, 5);
+	const queries = (args.queries || []).slice(0, 6);
 
 	const searchResults = await searchMultiple(lat, lng, radius_m, queries);
 
